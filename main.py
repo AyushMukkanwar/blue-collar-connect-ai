@@ -5,6 +5,7 @@ from routers import process, stream
 import os
 import json
 import tempfile
+import uvicorn
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 from google.cloud import aiplatform
@@ -96,3 +97,9 @@ api.include_router(stream.router)
 @api.get("/")
 async def health_check():
     return {"status": "healthy"}
+
+# Add this if __name__ block to use the PORT environment variable
+if __name__ == "__main__":
+    # Get port from environment variable or default to 10000
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:api", host="0.0.0.0", port=port)
