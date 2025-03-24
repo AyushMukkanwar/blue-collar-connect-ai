@@ -1,21 +1,29 @@
 import os
-from langchain_chroma import Chroma
-from dotenv import load_dotenv
-from langchain_google_vertexai import VertexAIEmbeddings
-from google.cloud import aiplatform
 
-load_dotenv()
-# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "D:\\dev\\AI\\RAG\\FastAPI\\blue-collar-connect-1378c-42e629d16ba2.json"
+# Directory for your persisted Chroma database
+CHROMA_DB_DIR = "./my_chroma_db"
 
-# Initialize Vertex AI
-aiplatform.init(
-    project=os.getenv("GOOGLE_CLOUD_PROJECT"),  # Add your project ID to .env file
-    location="us-central1",                     # or your preferred region
-)
+# Module-level variable for the vector store (initialized later)
+_vector_store = None
 
-DATA_PATH = "./docs/"
-CHROMA_DB_DIR = "./my_chroma_db" 
+def init_embeddings():
+    """Initializes the Vertex AI embeddings and creates the vector store.
+    
+    Returns:
+        tuple: (embeddings, vector_store)
+    """
+    from langchain_google_vertexai import VertexAIEmbeddings
+    from langchain_chroma import Chroma
 
-embeddings = VertexAIEmbeddings(model=os.getenv("EMBEDDINGS_MODEL_ID"))
+    embeddings = VertexAIEmbeddings(model=os.getenv("EMBEDDINGS_MODEL_ID"))
+    
+    global _vector_store
+    _vector_store = Chroma(embedding_function=embeddings, persist_directory=CHROMA_DB_DIR)
+    
+    return embeddings, _vector_store
 
-vector_store = Chroma(embedding_function=embeddings, persist_directory=CHROMA_DB_DIR)
+def get_vector_store():
+    """Returns the vector store. Raises an error if it has not been initialized."""
+    if _vector_store is None:
+        raise ValueError("Vector store not initialized. Ensure init_embeddings() is called first.")
+    return _vector_store

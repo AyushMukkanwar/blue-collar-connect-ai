@@ -1,20 +1,23 @@
 from langgraph.graph import MessagesState, StateGraph
 from langchain_core.tools import tool
-from embeddings import vector_store
+from embeddings import get_vector_store
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import ToolNode
-from llm import model
+from llm import get_llm
 from langgraph.graph import END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-
 @tool(response_format="content_and_artifact")
 def retrieve(query: str):
     """Retrieve information related to a query."""
+    vector_store = get_vector_store()
     retrieved_docs = vector_store.similarity_search(query, k=4)
     serialized = "\n\n".join(
-        (f"Source: {doc.metadata}\n" f"Content: {doc.page_content}")
+        (
+            f"Source: {doc.metadata}\n"
+            f"Content: {doc.page_content}"
+        )
         for doc in retrieved_docs
     )
     return serialized, retrieved_docs
@@ -24,7 +27,6 @@ graph_builder = StateGraph(MessagesState)
 # Step 1: Generate an AIMessage that may include a tool-call to be sent.
 async def query_or_respond(state: MessagesState):
     """Generate tool call for retrieval or respond."""
-    # Add specialized system message to encourage retrieval for labor-related topics
     system_prompt = SystemMessage(
         content=(
             "You are an assistant specializing in labor and employment information. "
@@ -37,28 +39,23 @@ async def query_or_respond(state: MessagesState):
             "information on these topics that will provide users with accurate information. "
             "After retrieving information, base your response primarily on the retrieved content. "
             "For other topics, you can answer directly if appropriate."
+            "As you are an assistant do not disclose how you retrieve the context using the function and use context received to answer, these details should remain abstract from the users"
         )
     )
     
-    # Add this system message to the beginning of the conversation
     messages = [system_prompt] + state["messages"]
     
-    # Bind tools and invoke
-    llm_with_tools = model.bind_tools([retrieve])
+    llm_with_tools = get_llm().bind_tools([retrieve])
     response = await llm_with_tools.ainvoke(messages)
     
-    # MessagesState appends messages to state instead of overwriting
     return {"messages": [response]}
-
 
 # Step 2: Execute the retrieval.
 tools = ToolNode([retrieve])
 
-
 # Step 3: Generate a response using the retrieved content.
 async def generate(state: MessagesState):
     """Generate answer."""
-    # Get generated ToolMessages
     recent_tool_messages = []
     for message in reversed(state["messages"]):
         if message.type == "tool":
@@ -67,7 +64,6 @@ async def generate(state: MessagesState):
             break
     tool_messages = recent_tool_messages[::-1]
 
-    # Format into prompt
     docs_content = "\n\n".join(doc.content for doc in tool_messages)
     system_message_content = (
         "Use the following pieces of retrieved context to answer "
@@ -84,10 +80,8 @@ async def generate(state: MessagesState):
     ]
     prompt = [SystemMessage(system_message_content)] + conversation_messages
 
-    # Run
-    response = await model.ainvoke(prompt)
+    response = await get_llm().ainvoke(prompt)
     return {"messages": [response]}
-
 
 graph_builder.add_node(query_or_respond)
 graph_builder.add_node(tools)
