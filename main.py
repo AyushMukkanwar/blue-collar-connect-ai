@@ -80,8 +80,7 @@ api = FastAPI(lifespan=lifespan)
 api.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000", 
-        "https://your-frontend-project.vercel.app",
+        "http://localhost:3000",
         os.getenv("FRONTEND_URL", "")
     ],
     allow_credentials=True,
